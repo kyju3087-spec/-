@@ -31,11 +31,9 @@ export async function requestAiEncouragement(
       }
 
       // Check if 503 or transient error
-      if (response.status === 503) {
-        if (attempt < 2) {
-          await sleep(1000);
-          continue;
-        }
+      if (response.status === 503 && attempt < 2) {
+        await sleep(1000);
+        continue;
       }
 
       // Try fallback route /api/gemini/encourage if 404
@@ -51,9 +49,19 @@ export async function requestAiEncouragement(
       }
 
       const errData = await response.json().catch(() => null);
-      throw new Error(errData?.error || `서버 응답 오류 (상태 코드: ${response.status})`);
+      const serverErrMsg = errData?.error || `서버 응답 오류 (상태 코드: ${response.status})`;
+
+      // If it's a configuration error (API Key missing or invalid), notify immediately
+      if (serverErrMsg.includes('GEMINI_API_KEY') || serverErrMsg.includes('API_KEY')) {
+        throw new Error(serverErrMsg);
+      }
+
+      throw new Error(serverErrMsg);
     } catch (err: any) {
       lastError = err;
+      if (err.message && (err.message.includes('GEMINI_API_KEY') || err.message.includes('API_KEY'))) {
+        throw err;
+      }
       if (attempt < 2) {
         await sleep(800);
       }
@@ -70,7 +78,12 @@ export async function requestAiEncouragement(
     }
   }
 
-  // Graceful emotion-tailored fallback so the user experience is never broken
+  // If there was an explicit API key error, throw it so user can fix Vercel settings
+  if (lastError?.message && lastError.message.includes('GEMINI_API_KEY')) {
+    throw lastError;
+  }
+
+  // Graceful emotion-tailored fallback as safety net
   return generateClientFallback(params);
 }
 
@@ -125,7 +138,8 @@ async function callGeminiRestApiDirect(
   params: RequestEncouragementParams,
   apiKey: string
 ): Promise<AiEncouragement> {
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+  // Using Gemini 3.8 Flash (3.6+ version)
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${apiKey}`;
 
   const prompt = `오늘의 일기:
 - 날짜: ${params.date}

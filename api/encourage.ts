@@ -1,27 +1,7 @@
 import { generateEncouragement, DiaryEncourageRequest } from '../server/geminiService';
 
-async function parseRequestBody(req: any): Promise<any> {
-  if (req.body !== undefined && req.body !== null) {
-    return typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
-  }
-  return new Promise((resolve, reject) => {
-    let raw = '';
-    req.on('data', (chunk: any) => {
-      raw += chunk;
-    });
-    req.on('end', () => {
-      try {
-        resolve(raw ? JSON.parse(raw) : {});
-      } catch (err) {
-        reject(err);
-      }
-    });
-    req.on('error', reject);
-  });
-}
-
 export default async function handler(req: any, res: any) {
-  // Enable CORS
+  // CORS configuration
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -35,18 +15,34 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
-    const body: DiaryEncourageRequest = await parseRequestBody(req);
+    // Parse body safely without hanging stream listeners
+    let body: any = req.body;
+    if (typeof body === 'string') {
+      try {
+        body = JSON.parse(body);
+      } catch {
+        // keep as is
+      }
+    }
 
-    if (!body || !body.content || !body.emotion) {
+    if (!body || typeof body !== 'object') {
       return res.status(400).json({
-        error: '일기 내용(content)과 감정(emotion: 기쁨, 지침, 설렘, 불안)을 전달해주세요.',
+        error: '유효한 요청 본문(JSON)이 전달되지 않았습니다.',
       });
     }
 
-    const result = await generateEncouragement(body);
+    const { date, emotion, title, content } = body as DiaryEncourageRequest;
+
+    if (!content || !emotion) {
+      return res.status(400).json({
+        error: '일기 내용(content)과 감정(emotion: 기쁨, 지침, 설렘, 불안)을 모두 입력해주세요.',
+      });
+    }
+
+    const result = await generateEncouragement({ date, emotion, title, content });
     return res.status(200).json(result);
   } catch (error: any) {
-    console.error('Error generating encouragement:', error);
+    console.error('Vercel API error in encourage.ts:', error);
     return res.status(500).json({
       error: error?.message || 'Gemini API 처리 중 오류가 발생했습니다.',
     });

@@ -1,7 +1,7 @@
 import { GoogleGenAI, Type } from '@google/genai';
 import dotenv from 'dotenv';
 
-// Load environment variables
+// Load environment variables for local development
 dotenv.config();
 
 export interface DiaryEncourageRequest {
@@ -41,8 +41,9 @@ export async function generateEncouragement(
   const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
 
   if (!apiKey) {
-    // If API key is completely missing, return comforting fallback
-    return getThoughtfulFallback(input);
+    throw new Error(
+      'GEMINI_API_KEY가 설정되지 않았습니다. Vercel Project Settings > Environment Variables에서 GEMINI_API_KEY를 등록해주세요.'
+    );
   }
 
   const ai = new GoogleGenAI({
@@ -127,8 +128,9 @@ ${input.content}
     },
   };
 
-  // Primary model and fallback model list to handle 503 high demand spikes gracefully
-  const candidateModels = ['gemini-3.8-flash', 'gemini-3.1-flash-lite'];
+  // Google Gemini 3.6+ models: gemini-3.8-flash (Gemini 3.8) & gemini-flash-latest
+  const candidateModels = ['gemini-3.8-flash', 'gemini-flash-latest'];
+  let lastErr: any = null;
 
   for (const model of candidateModels) {
     try {
@@ -146,16 +148,20 @@ ${input.content}
         }
       }
     } catch (err: any) {
-      console.warn(`Model ${model} call failed with:`, err?.message || err);
-      // If 503 high demand or temporary unavailable, brief sleep then try next candidate
-      if (err?.status === 503 || err?.code === 503 || String(err).includes('503') || String(err).includes('high demand')) {
-        await sleep(600);
-        continue;
-      }
+      lastErr = err;
+      console.warn(`Model ${model} call failed:`, err?.message || err);
+      // Wait briefly before trying next candidate
+      await sleep(600);
     }
   }
 
-  // If both models temporarily fail due to high demand, provide an emotion-tailored heartfelt reply
+  // If both models threw an error, check if it's an API Key invalid error
+  const errMsg = lastErr?.message || String(lastErr || '');
+  if (errMsg.includes('API_KEY_INVALID') || errMsg.includes('403') || errMsg.includes('unregistered')) {
+    throw new Error('유효하지 않은 GEMINI_API_KEY입니다. Vercel 환경 변수에 올바른 API 키를 등록해주세요.');
+  }
+
+  // Fallback to graceful response if transient network spike occurred
   return getThoughtfulFallback(input);
 }
 
