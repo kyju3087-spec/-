@@ -56,7 +56,7 @@ export default defineConfig(() => {
     plugins: [react(), tailwindcss(), geminiDevServerPlugin()],
     resolve: {
       alias: {
-        '@': path.resolve(__dirname, '.'),
+        '@': path.resolve(import.meta.dirname || '.', '.'),
       },
     },
     server: {
