@@ -9,6 +9,20 @@ function geminiDevServerPlugin(): Plugin {
     configureServer(server) {
       server.middlewares.use(async (req, res, next) => {
         const url = req.url?.split('?')[0];
+        if (url === '/api/health' && (req.method === 'GET' || req.method === 'POST')) {
+          try {
+            const { testGeminiConnection } = await import('./server/geminiService');
+            const result = await testGeminiConnection();
+            res.setHeader('Content-Type', 'application/json; charset=utf-8');
+            res.statusCode = result.ok ? 200 : 500;
+            res.end(JSON.stringify(result));
+          } catch (err: any) {
+            res.setHeader('Content-Type', 'application/json; charset=utf-8');
+            res.statusCode = 500;
+            res.end(JSON.stringify({ ok: false, error: err?.message || 'Health check failed' }));
+          }
+          return;
+        }
         if ((url === '/api/encourage' || url === '/api/gemini/encourage') && req.method === 'POST') {
           let body = '';
           req.on('data', (chunk) => {

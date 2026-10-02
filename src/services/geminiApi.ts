@@ -9,6 +9,28 @@ export interface RequestEncouragementParams {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+export async function checkApiHealth(): Promise<{
+  ok: boolean;
+  model: string;
+  latencyMs: number;
+  message: string;
+  error?: string;
+}> {
+  try {
+    const res = await fetch('/api/health');
+    const data = await res.json();
+    return data;
+  } catch (err: any) {
+    return {
+      ok: false,
+      model: 'unknown',
+      latencyMs: 0,
+      message: '서버 연결에 실패했습니다.',
+      error: err?.message,
+    };
+  }
+}
+
 export async function requestAiEncouragement(
   params: RequestEncouragementParams
 ): Promise<AiEncouragement> {

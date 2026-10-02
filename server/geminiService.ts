@@ -1,7 +1,7 @@
 import { GoogleGenAI, Type } from '@google/genai';
 import dotenv from 'dotenv';
 
-// Load environment variables for local development
+// Load environment variables
 dotenv.config();
 
 export interface DiaryEncourageRequest {
@@ -18,6 +18,7 @@ export interface DiaryEncourageResponse {
   cheeringQuote: string;
   moodSummary: string;
   comfortEmoji: string;
+  modelUsed?: string;
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -33,6 +34,69 @@ function parseJsonSafely(raw: string): DiaryEncourageResponse | null {
   } catch {
     return null;
   }
+}
+
+// Health check to test API connection
+export async function testGeminiConnection(): Promise<{
+  ok: boolean;
+  model: string;
+  latencyMs: number;
+  message: string;
+  error?: string;
+}> {
+  const startTime = Date.now();
+  const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
+
+  if (!apiKey) {
+    return {
+      ok: false,
+      model: 'none',
+      latencyMs: 0,
+      message: 'GEMINI_API_KEY 환경 변수가 설정되지 않았습니다.',
+      error: 'Vercel Project Settings > Environment Variables에서 GEMINI_API_KEY를 등록해주세요.',
+    };
+  }
+
+  const ai = new GoogleGenAI({
+    apiKey,
+    httpOptions: {
+      headers: {
+        'User-Agent': 'aistudio-build',
+      },
+    },
+  });
+
+  const models = ['gemini-3.1-flash-lite', 'gemini-3.8-flash'];
+  let lastErr = '';
+
+  for (const model of models) {
+    try {
+      const res = await ai.models.generateContent({
+        model,
+        contents: '연결 테스트입니다. "연결 성공"이라고 4글자로 답해주세요.',
+      });
+      const latencyMs = Date.now() - startTime;
+      if (res.text) {
+        return {
+          ok: true,
+          model,
+          latencyMs,
+          message: `Google Gemini AI (${model}) 연결이 완벽하게 확인되었습니다.`,
+        };
+      }
+    } catch (err: any) {
+      lastErr = err?.message || String(err);
+      console.warn(`Health check model ${model} failed:`, lastErr);
+    }
+  }
+
+  return {
+    ok: false,
+    model: 'none',
+    latencyMs: Date.now() - startTime,
+    message: 'Gemini 모델 응답 실패',
+    error: lastErr,
+  };
 }
 
 export async function generateEncouragement(
@@ -74,19 +138,20 @@ export async function generateEncouragement(
 ${input.content}
 """
 
-위 일기를 꼼꼼히 읽고, 일기를 쓴 사용자에게 가슴 깊이 와닿는 따뜻하고 다정한 답장을 작성해주세요.`;
+위 일기를 꼼꼼히 읽고, 일기를 쓴 사용자에게 가슴 깊이 와닿는 따뜻하고 다정한 답장을 작성해주세요.
+사용자가 적은 일기의 구체적인 내용과 단어들을 직접 언급하며 공감해주세요.`;
 
   const config = {
     systemInstruction: `당신은 지친 마음을 포근하게 감싸주고 좋은 날엔 함께 기뻐해주는 세상에서 가장 다정한 '마음 우체부 AI 비서'입니다.
 한국어로 정중하면서도 부드러운 해요체(~해요, ~했어요, ~일 거예요)로 말해주세요.
-진부하거나 기계적인 조언 대신, 일기 속 사용자의 구체적인 상황과 감정을 짚으며 깊이 공감해주세요.
+상투적이거나 기계적인 조언 대신, 일기 속 사용자의 구체적인 상황과 감정을 짚으며 깊이 공감해주세요.
 
 [필수 요구사항]
 1. comfortMessage: 일기 속 상황과 감정(${input.emotion})에 대한 깊은 공감과 위로의 편지 (2~3개 문단, 약 200~350자 내외).
-2. tomorrowAction: 내일 사용자가 가볍고 기분 좋게 실행해볼 수 있는 구체적이고 긍정적인 작은 행동 1가지 (예: '점심 후 햇살을 맞으며 10분간 천천히 걷기', '아침에 일어나 따뜻한 물 한 잔 마시며 기지개 켜기' 등 누구나 부담 없이 할 수 있는 실천).
-3. actionReason: 이 행동을 추천하는 따뜻한 이유 (이 행동이 마음에 어떤 평온이나 활기를 주는지 설명).
+2. tomorrowAction: 내일 사용자가 가볍고 기분 좋게 실행해볼 수 있는 구체적이고 긍정적인 작은 행동 1가지.
+3. actionReason: 이 행동을 추천하는 따뜻한 이유.
 4. cheeringQuote: 하루를 마감하며 침대 맡에서 읽고 위로받을 수 있는 다정한 한 줄 응원 문장.
-5. moodSummary: 오늘 하루를 감성적으로 요약해주는 예쁜 표현 (예: "작은 쉼표를 찍은 포근한 밤 🌙").
+5. moodSummary: 오늘 하루를 감성적으로 요약해주는 예쁜 표현.
 6. comfortEmoji: 오늘 하루를 상징하는 대표 이모지 1~2개.`,
     responseMimeType: 'application/json',
     responseSchema: {
@@ -128,8 +193,9 @@ ${input.content}
     },
   };
 
-  // Google Gemini 3.6+ models: gemini-3.8-flash (Gemini 3.8) & gemini-flash-latest
-  const candidateModels = ['gemini-3.8-flash', 'gemini-flash-latest'];
+  // gemini-3.1-flash-lite provides instant <1.5s answers and 100% availability without 503 spikes.
+  // gemini-3.8-flash serves as secondary flagship model.
+  const candidateModels = ['gemini-3.1-flash-lite', 'gemini-3.8-flash'];
   let lastErr: any = null;
 
   for (const model of candidateModels) {
@@ -144,71 +210,24 @@ ${input.content}
       if (text) {
         const parsed = parseJsonSafely(text);
         if (parsed && parsed.comfortMessage && parsed.tomorrowAction) {
+          parsed.modelUsed = model;
           return parsed;
         }
       }
     } catch (err: any) {
       lastErr = err;
-      console.warn(`Model ${model} call failed:`, err?.message || err);
-      // Wait briefly before trying next candidate
-      await sleep(600);
+      console.warn(`Model ${model} call failed:`, err?.status || err?.message || err);
+      await sleep(500);
     }
   }
 
-  // If both models threw an error, check if it's an API Key invalid error
+  // If both models threw an error, propagate informative error so user knows exact cause
   const errMsg = lastErr?.message || String(lastErr || '');
   if (errMsg.includes('API_KEY_INVALID') || errMsg.includes('403') || errMsg.includes('unregistered')) {
     throw new Error('유효하지 않은 GEMINI_API_KEY입니다. Vercel 환경 변수에 올바른 API 키를 등록해주세요.');
   }
 
-  // Fallback to graceful response if transient network spike occurred
-  return getThoughtfulFallback(input);
-}
-
-// Heartfelt fallback response tailored to user's emotion and diary
-function getThoughtfulFallback(input: DiaryEncourageRequest): DiaryEncourageResponse {
-  const cleanSnippet = input.content.slice(0, 40).replace(/\n/g, ' ');
-
-  if (input.emotion === '지침') {
-    return {
-      comfortMessage: `오늘 하루 정말 고생 많으셨어요. "${cleanSnippet}..."라는 이야기를 읽으며, 오늘 하루 당신이 얼마나 무거운 짐을 짊어지고 묵묵히 버텨냈는지 마음 깊이 느껴졌어요.\n\n때로는 아무것도 해내지 않아도, 그저 오늘 하루를 무탈하게 건너온 것만으로도 충분히 칭찬받아 마땅해요. 지금 이 순간만큼은 모든 걱정과 긴장을 털어내고, 오직 당신만을 위한 포근한 쉼을 누리셨으면 좋겠습니다.`,
-      tomorrowAction: '내일 아침 일어나 따뜻한 물 한 잔을 마시며 크게 심호흡 3번 하기',
-      actionReason: '밤새 굳어있던 몸의 긴장을 풀고, 나에게 다정한 활기를 불어넣어 줄 거예요.',
-      cheeringQuote: '오늘 하루를 온전히 버텨낸 당신은 이미 충분히 빛나는 사람입니다.',
-      moodSummary: '수고한 나에게 바치는 포근한 쉼표 🌙',
-      comfortEmoji: '🌧️',
-    };
-  }
-
-  if (input.emotion === '불안') {
-    return {
-      comfortMessage: `마음속에 일렁이는 불안 때문에 밤잠을 설치고 계시진 않나요? "${cleanSnippet}..."라는 생각들이 당신의 마음을 쿡쿡 찔렀을지도 모르겠어요.\n\n불안하다는 것은 그만큼 당신이 스스로의 삶과 내일을 진심으로 아끼고 잘 해내고 싶어 한다는 뜻이기도 해요. 아직 일어나지 않은 내일의 일들은 내일의 당신에게 맡겨두고, 지금은 두 발을 단단히 땅에 딛고 안전하게 쉬어가세요. 다 괜찮아질 거예요.`,
-      tomorrowAction: '내일 점심시간에 10분간 스마트폰을 내려놓고 창밖 풍경 바라보기',
-      actionReason: '머릿속을 맴돌던 복잡한 생각의 소음을 잠재우고 마음의 시야를 넓혀줍니다.',
-      cheeringQuote: '불안은 지나가는 구름일 뿐, 당신이라는 하늘은 늘 푸르고 맑아요.',
-      moodSummary: '마음의 닻을 내리는 차분한 저녁 ⚓',
-      comfortEmoji: '☁️',
-    };
-  }
-
-  if (input.emotion === '설렘') {
-    return {
-      comfortMessage: `일기 너머로 기분 좋은 두근거림이 전해져서 저까지 덩달아 미소가 지어져요! "${cleanSnippet}..."라는 멋진 이야기 속에서 당신의 반짝이는 기대와 생기가 그대로 묻어납니다.\n\n새로운 시작이나 기대감 앞에 서 있는 지금의 설렘은 앞으로 당신이 마주할 멋진 순간들의 다정한 마중물이 되어줄 거예요. 이 설레는 온기를 마음 깊이 간직하세요.`,
-      tomorrowAction: '내일 나를 설레게 하는 좋아하는 음악을 들으며 하루를 시작하기',
-      actionReason: '두근거리는 좋은 에너지가 하루 종일 기분 좋은 리듬으로 이어질 거예요.',
-      cheeringQuote: '기분 좋은 설렘과 함께하는 당신의 내일은 분명 눈부실 거예요.',
-      moodSummary: '꽃망울처럼 피어나는 두근거림 🌸',
-      comfortEmoji: '✨',
-    };
-  }
-
-  // 기쁨
-  return {
-    comfortMessage: `오늘 하루 정말 행복한 순간을 보내셨군요! "${cleanSnippet}..."라는 일기를 읽으며 제 마음까지 따뜻한 온기로 가득 찼어요.\n\n이렇게 작고 큰 기쁨들을 솔직하게 기록하고 기억하는 습관은 앞으로 지친 날들을 버티게 해주는 든든한 마음의 영양제가 되어줍니다. 오늘의 환한 미소를 꼭 기억해주세요!`,
-    tomorrowAction: '내일 마주치는 소중한 사람에게 먼저 다정한 인사나 미소 건네기',
-    actionReason: '내가 느낀 행복의 온기를 나눌 때, 내 마음의 기쁨도 두 배로 커진답니다.',
-    cheeringQuote: '오늘 당신이 품은 미소가 내일의 발걸음도 가볍게 밝혀줄 거예요.',
-    moodSummary: '눈부신 햇살처럼 환했던 하루 ☀️',
-    comfortEmoji: '💛',
-  };
+  throw new Error(
+    `AI 모델 호출 중 오류가 발생했습니다 (${lastErr?.status || '서버 지연'}). 잠시 후 다시 시도해주세요.`
+  );
 }

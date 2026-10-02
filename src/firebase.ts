@@ -34,6 +34,7 @@ export interface AiEncouragement {
   cheeringQuote: string;
   moodSummary: string;
   comfortEmoji?: string;
+  modelUsed?: string;
 }
 
 export interface DiaryEntry {

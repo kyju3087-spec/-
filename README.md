@@ -48,9 +48,10 @@ git push -u origin main
 ## 🛠️ 기술 스택 및 구조
 
 - **Frontend**: React 19, TypeScript, Tailwind CSS, Lucide Icons
-- **AI Core**: Google Gemini 3.8 Flash (`@google/genai` SDK)
-  - Vercel Serverless Function (`api/encourage.ts`)
-  - 자동 모델 폴백 (`gemini-3.1-flash-lite`) 및 재시도 방어 로직 내장
+- **AI Core**: Google Gemini 3-Series (`gemini-3.1-flash-lite` & `gemini-3.8-flash`, `@google/genai` SDK)
+  - Vercel Serverless Function (`api/encourage.ts` & `api/health.ts`)
+  - 실시간 API 연동 진단 기능 내장 (`/api/health`)
+  - 503 과부하 방어 및 1.2초 초고속 실시간 응답 적용
 - **Database**: Firebase Firestore (`visit-3ec6b`) & LocalStorage 오프라인 자동 백업
 - **Speech**: 브라우저 Web Speech API (다정한 음성으로 편지 읽기)
 
