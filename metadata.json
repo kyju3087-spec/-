@@ -1,0 +1,6 @@
+{
+  "name": "따뜻한 하루 일기 - AI 위로와 응원",
+  "description": "오늘의 일기와 감정(기쁨, 지침, 설렘, 불안)을 적으면 Google Gemini AI 비서가 다정한 위로와 내일을 위한 긍정 행동을 선물하는 힐링 다이어리",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
