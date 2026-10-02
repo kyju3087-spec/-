@@ -1,4 +1,4 @@
-import { testGeminiConnection } from '../server/geminiService';
+import { testGeminiConnection } from './geminiService';
 
 export default async function handler(req: any, res: any) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -11,11 +11,15 @@ export default async function handler(req: any, res: any) {
 
   try {
     const result = await testGeminiConnection();
-    return res.status(result.ok ? 200 : 500).json(result);
+    // Return 200 with result payload so client can inspect status without 500 network error
+    return res.status(200).json(result);
   } catch (error: any) {
-    return res.status(500).json({
+    return res.status(200).json({
       ok: false,
-      message: error?.message || '연결 확인 실패',
+      model: 'none',
+      latencyMs: 0,
+      message: '연결 확인 실패',
+      error: error?.message || '알 수 없는 오류',
     });
   }
 }

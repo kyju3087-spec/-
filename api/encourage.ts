@@ -1,10 +1,10 @@
-import { generateEncouragement, DiaryEncourageRequest } from '../server/geminiService';
+import { generateEncouragement, DiaryEncourageRequest } from './geminiService';
 
 export default async function handler(req: any, res: any) {
   // CORS configuration
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-gemini-api-key');
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
@@ -15,7 +15,6 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
-    // Parse body safely without hanging stream listeners
     let body: any = req.body;
     if (typeof body === 'string') {
       try {
@@ -29,6 +28,12 @@ export default async function handler(req: any, res: any) {
       return res.status(400).json({
         error: '유효한 요청 본문(JSON)이 전달되지 않았습니다.',
       });
+    }
+
+    // Support client-supplied API key fallback if Vercel env is not populated
+    const clientKey = (req.headers['x-gemini-api-key'] as string) || body.apiKey;
+    if (clientKey && !process.env.GEMINI_API_KEY) {
+      process.env.GEMINI_API_KEY = clientKey;
     }
 
     const { date, emotion, title, content } = body as DiaryEncourageRequest;

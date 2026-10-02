@@ -40,7 +40,13 @@ import {
   fetchDiariesFromDb,
   deleteDiaryFromDb
 } from './firebase';
-import { requestAiEncouragement, checkApiHealth } from './services/geminiApi';
+import {
+  requestAiEncouragement,
+  checkApiHealth,
+  getUserApiKey,
+  saveUserApiKey,
+  clearUserApiKey,
+} from './services/geminiApi';
 
 // Emotion definitions with aesthetic color schemes & descriptions
 interface EmotionOption {
@@ -149,6 +155,8 @@ export default function App() {
     error?: string;
   }>({ checking: false, checked: false });
   const [showHealthModal, setShowHealthModal] = useState(false);
+  const [customKeyInput, setCustomKeyInput] = useState<string>(() => getUserApiKey());
+  const [keySaveSuccess, setKeySaveSuccess] = useState(false);
 
   const handleCheckApiHealth = async () => {
     setApiHealth((prev) => ({ ...prev, checking: true }));
@@ -173,6 +181,21 @@ export default function App() {
         error: err?.message,
       });
     }
+  };
+
+  const handleSaveCustomKey = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!customKeyInput.trim()) return;
+    saveUserApiKey(customKeyInput.trim());
+    setKeySaveSuccess(true);
+    setTimeout(() => setKeySaveSuccess(false), 3000);
+    await handleCheckApiHealth();
+  };
+
+  const handleClearCustomKey = async () => {
+    clearUserApiKey();
+    setCustomKeyInput('');
+    await handleCheckApiHealth();
   };
 
   // Load entries on mount and check API health
@@ -519,7 +542,64 @@ export default function App() {
               )}
             </div>
 
-            <div className="flex items-center justify-end gap-2 pt-2">
+            {/* Custom API Key input section */}
+            <div className="pt-2 border-t border-stone-200/80 space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-stone-800 flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                  <span>내 Gemini API 키 직접 등록 (간편 연결)</span>
+                </label>
+                {getUserApiKey() && (
+                  <button
+                    type="button"
+                    onClick={handleClearCustomKey}
+                    className="text-[11px] text-stone-400 hover:text-rose-600 transition-colors"
+                  >
+                    등록 키 삭제
+                  </button>
+                )}
+              </div>
+              <p className="text-[11px] text-stone-500 leading-relaxed">
+                Vercel 환경 변수 설정이 번거로우신 경우, 여기에 구글 API 키를 입력하시면 브라우저에서 즉시 안전하게 연동됩니다. (키는 브라우저 로컬 저장소에만 보관됩니다)
+              </p>
+
+              <form onSubmit={handleSaveCustomKey} className="space-y-2 pt-1">
+                <div className="flex gap-2">
+                  <input
+                    type="password"
+                    placeholder="AIzaSy... 로 시작하는 Gemini API 키 입력"
+                    value={customKeyInput}
+                    onChange={(e) => setCustomKeyInput(e.target.value)}
+                    className="flex-1 px-3 py-2 rounded-xl border border-stone-200 bg-stone-50 text-xs focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-300"
+                  />
+                  <button
+                    type="submit"
+                    disabled={!customKeyInput.trim() || apiHealth.checking}
+                    className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold shrink-0 disabled:opacity-50 transition-colors cursor-pointer"
+                  >
+                    저장 및 연결
+                  </button>
+                </div>
+                {keySaveSuccess && (
+                  <p className="text-[11px] text-emerald-600 font-medium">
+                    ✓ API 키가 성공적으로 저장되었습니다!
+                  </p>
+                )}
+                <div className="text-[11px] text-stone-400 flex items-center justify-between pt-0.5">
+                  <span>아직 API 키가 없으신가요?</span>
+                  <a
+                    href="https://aistudio.google.com/apikey"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-amber-700 hover:underline font-medium"
+                  >
+                    Google AI Studio에서 무료 발급 ↗
+                  </a>
+                </div>
+              </form>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-stone-100">
               <button
                 type="button"
                 onClick={handleCheckApiHealth}
